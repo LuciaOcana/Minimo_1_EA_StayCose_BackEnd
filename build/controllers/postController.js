@@ -40,6 +40,7 @@ exports.getPost = getPost;
 exports.getAuthorPosts = getAuthorPosts;
 //import { userInterface } from "../models/user";
 const postServices = __importStar(require("../services/postServices"));
+const ratingServices = __importStar(require("../services/ratingServices"));
 //import * as userServices from "../services/userServices"; // Asegúrate de importar los servicios de usuario
 //import { post } from "@typegoose/typegoose";
 //import { userInterface } from "../models/user";
@@ -56,10 +57,11 @@ function getPosts(_req, res) {
         }
     });
 }
+// Crear un nuevo post y asignar una valoración si es proporcionada
 function createPost(req, res) {
     return __awaiter(this, void 0, void 0, function* () {
         try {
-            const { author, postType, content, image, postDate } = req.body;
+            const { author, postType, content, image, postDate, ratingValue, ratingUser } = req.body;
             // Comprobamos si el usuario existe
             const userExists = yield postServices.getEntries.checkIfUserExists(author);
             if (!userExists) {
@@ -72,17 +74,45 @@ function createPost(req, res) {
                 content,
                 image: image || '',
                 postDate: postDate ? new Date(postDate) : new Date(),
+                likes: 0, // Inicializamos el contador de likes
+                dislikes: 0, // Inicializamos el contador de dislikes
             };
             // Usamos el servicio para crear el post
             const post = yield postServices.getEntries.create(newPost);
-            return res.json({
-                message: "Post created",
+            // Si se incluye una valoración (rating), la creamos y asignamos al post
+            if (ratingValue && ratingUser) {
+                // Verificamos si ya existe una valoración de este usuario en el post
+                const existingRating = yield ratingServices.getEntries.findById(post._id.toString());
+                if (existingRating) {
+                    return res.status(400).json({ error: 'Ya has valorado este post' });
+                }
+                // Crear el objeto rating
+                const newRating = {
+                    postID: post._id.toString(), // Convertimos el ObjectId a string
+                    user: ratingUser,
+                    value: ratingValue,
+                    timestamp: new Date()
+                };
+                // Usamos el servicio para crear la valoración
+                yield ratingServices.getEntries.create(newRating);
+                // Actualizamos el contador de likes o dislikes en el post
+                if (ratingValue === 1) {
+                    post.likes += 1; // Incrementar likes
+                }
+                else if (ratingValue === -1) {
+                    post.dislikes += 1; // Incrementar dislikes
+                }
+                // Guardamos el post con los nuevos valores de likes y dislikes
+                yield post.save();
+            }
+            return res.status(201).json({
+                message: "Post creado y valoración asignada (si se proporcionó)",
                 post
             });
         }
         catch (error) {
-            //console.error("Error creating post:", error.message); // Muestra el error en la consola
-            return res.status(500).json({ error: 'Failed to create post' }); // Devuelve un mensaje de error al frontend
+            console.error("Error creando el post:", error);
+            return res.status(500).json({ error: 'Error al crear el post' });
         }
     });
 }

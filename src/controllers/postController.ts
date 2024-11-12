@@ -1,7 +1,9 @@
 import { Request, Response } from "express";
 //import { userInterface } from "../models/user";
 import * as postServices from "../services/postServices";
+import * as ratingServices from "../services/ratingServices";
 import { postInterface } from "../models/post";
+import { ratingInterface } from "../models/rating";
 //import * as userServices from "../services/userServices"; // Asegúrate de importar los servicios de usuario
 
 
@@ -20,37 +22,71 @@ export async function getPosts(_req: Request, res: Response): Promise<Response> 
    }
 }
 
+// Crear un nuevo post y asignar una valoración si es proporcionada
 export async function createPost(req: Request, res: Response): Promise<Response> {
-   try {
-      const { author, postType, content, image, postDate } = req.body as postInterface;
-
-      // Comprobamos si el usuario existe
-      const userExists = await postServices.getEntries.checkIfUserExists(author);
-      if (!userExists) {
-          return res.status(400).json({ error: "User does not exist" });
-      }
-
-      // Creamos un nuevo objeto de post
-      const newPost: postInterface = {
-          author,
-          postType,
-          content,
-          image: image || '',
-          postDate: postDate ? new Date(postDate) : new Date(),
-      };
-
-      // Usamos el servicio para crear el post
-      const post = await postServices.getEntries.create(newPost);
-
-      return res.json({
-          message: "Post created",
-          post
-      });
-  } catch (error) {
-      //console.error("Error creating post:", error.message); // Muestra el error en la consola
-      return res.status(500).json({ error: 'Failed to create post' }); // Devuelve un mensaje de error al frontend
-  }
-  }
+    try {
+       const { author, postType, content, image, postDate, ratingValue, ratingUser } = req.body as postInterface & { ratingValue?: number, ratingUser?: string };
+ 
+       // Comprobamos si el usuario existe
+       const userExists = await postServices.getEntries.checkIfUserExists(author);
+       if (!userExists) {
+           return res.status(400).json({ error: "User does not exist" });
+       }
+ 
+       // Creamos un nuevo objeto de post
+       const newPost: postInterface = {
+           author,
+           postType,
+           content,
+           image: image || '',
+           postDate: postDate ? new Date(postDate) : new Date(),
+           likes: 0, // Inicializamos el contador de likes
+           dislikes: 0, // Inicializamos el contador de dislikes
+       };
+ 
+       // Usamos el servicio para crear el post
+       const post = await postServices.getEntries.create(newPost);
+ 
+       // Si se incluye una valoración (rating), la creamos y asignamos al post
+       if (ratingValue && ratingUser) {
+           // Verificamos si ya existe una valoración de este usuario en el post
+           const existingRating = await ratingServices.getEntries.findById(post._id.toString());
+           if (existingRating) {
+               return res.status(400).json({ error: 'Ya has valorado este post' });
+           }
+ 
+           // Crear el objeto rating
+           const newRating: ratingInterface = {
+                postID: post._id.toString(),  // Convertimos el ObjectId a string
+                user: ratingUser,
+               value: ratingValue,
+               timestamp: new Date()
+           };
+ 
+           // Usamos el servicio para crear la valoración
+           await ratingServices.getEntries.create(newRating);
+ 
+           // Actualizamos el contador de likes o dislikes en el post
+           if (ratingValue === 1) {
+               post.likes += 1; // Incrementar likes
+           } else if (ratingValue === -1) {
+               post.dislikes += 1; // Incrementar dislikes
+           }
+ 
+           // Guardamos el post con los nuevos valores de likes y dislikes
+           await post.save();
+       }
+ 
+       return res.status(201).json({
+           message: "Post creado y valoración asignada (si se proporcionó)",
+           post
+       });
+   } catch (error) {
+       console.error("Error creando el post:", error);
+       return res.status(500).json({ error: 'Error al crear el post' });
+   }
+ }
+ 
   export async function updatePost(req: Request, res: Response): Promise<Response> {
    try{
        console.log('Get post');

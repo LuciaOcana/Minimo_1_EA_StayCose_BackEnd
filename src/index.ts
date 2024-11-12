@@ -3,6 +3,7 @@ import cors from 'cors'
 import userRouter from './routes/userRoutes'
 //import eventRouter from './routes/eventRoutes'
 import postRouter from './routes/postRoutes'
+import ratingRouter from './routes/ratingRoutes'
 
 import { run } from './database/databaseConection'
 
@@ -22,6 +23,7 @@ app.get('/ping', (_req , res) => {
 
 app.use('/api/user', userRouter)
 app.use('/api/posts', postRouter)
+app.use('/api/ratings', ratingRouter)
 //app.use('/api/events', eventRouter)
 
 app.listen(PORT, () => {
